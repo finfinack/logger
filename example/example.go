@@ -9,11 +9,12 @@ import (
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
-	logger := logging.NewLogger(ctx, nil, "MAIN", "hostname")
+	logger := logging.NewLogger(ctx, nil, logging.LogLevelInfo, "MAIN", "hostname")
 
 	// Regular logging.
 	for i := 0; i < 3; i++ {
 		logger.Warnf("test(%d)", i)
+		logger.Debug("test") // this should not be logged due to the log level
 	}
 
 	// Cancel the context and wait for tasks to complete.

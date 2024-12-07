@@ -10,6 +10,14 @@ const (
 	LogPrefixFatal = "FATAL: "
 )
 
+const (
+	LogLevelDebug = 0
+	LogLevelInfo  = 10
+	LogLevelWarn  = 20
+	LogLevelError = 30
+	LogLevelFatal = 40
+)
+
 const contextCheckDelay = time.Second
 
 var logExitMessages = []string{
