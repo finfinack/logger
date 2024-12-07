@@ -51,3 +51,9 @@ func main() {
 	logger.Fatal("final error message")
 }
 ```
+
+You can also run the provided example:
+
+```bash
+go run example/example.go
+```
