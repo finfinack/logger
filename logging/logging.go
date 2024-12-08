@@ -30,7 +30,7 @@ func NewLogger(ctx context.Context, writer io.Writer, logLevel int, component st
 	if out == nil {
 		out = os.Stdout
 	}
-	logger := log.New(out, "", log.Ldate|log.Ltime|log.Lshortfile)
+	logger := log.New(out, "", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
 
 	l := &Logger{
 		ctx:       ctx,

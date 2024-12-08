@@ -11,11 +11,11 @@ This repo provides a logging library for Go which has a few benefits:
 
 The log format is as follows:
 
-`<LOG LEVEL>: <hostname> - [<COMPONENT>] YYYY/MM/DD hh:mm:ss <source file>:<line>: message`
+`YYYY/MM/DD hh:mm:ss <source file>:<line>: <LOG LEVEL>: <hostname> - [<COMPONENT>] message`
 
 And example of the above would be:
 
-`WARN: srv01 - [MAIN] 2024/12/07 14:46:38 logging.go:70: test message`
+`2024/12/07 14:46:38 logging.go:70: WARN: srv01 - [MAIN] test message`
 
 **Note**: The component is always formatted as 4 characters so you want to choose an appropriate abbreviation.
 
