@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -17,27 +16,25 @@ type Logger struct {
 	ctx    context.Context
 	logger *log.Logger
 
-	mu sync.Mutex
-
-	logLevel int
+	minLogLevel int
 
 	component string
 	hostname  string
 }
 
-func NewLogger(ctx context.Context, writer io.Writer, logLevel int, component string, hostname string) *Logger {
+func NewLogger(ctx context.Context, writer io.Writer, minLogLevel int, component string, hostname string) *Logger {
 	out := writer
 	if out == nil {
 		out = os.Stdout
 	}
-	logger := log.New(out, "", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
+	logger := log.New(out, "", 0) // omit default prefixes
 
 	l := &Logger{
-		ctx:       ctx,
-		logger:    logger,
-		logLevel:  logLevel,
-		component: strings.ToUpper(component),
-		hostname:  hostname,
+		ctx:         ctx,
+		logger:      logger,
+		minLogLevel: minLogLevel,
+		component:   strings.ToUpper(component),
+		hostname:    hostname,
 	}
 	go l.waitForContext()
 	return l
@@ -59,22 +56,21 @@ func (l *Logger) waitForContext() {
 	}
 }
 
-func (l *Logger) logf(pfx string, exit bool, format string, v ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.logger.SetPrefix(fmt.Sprintf("%s%s - [%-4s] ", pfx, l.hostname, l.component))
-	if exit {
-		l.logger.Fatalf(format, v...) // Fatal prints and then calls os.Exit(1)
+func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
+	msg = fmt.Sprintf(msg, v...)
+	severity, ok := logLevelToMessage[logLevel]
+	if !ok {
+		severity = logPrefixUnknown
 	}
-	l.logger.Printf(format, v...)
+	return fmt.Sprintf("[%s][%-5s][%-4s][%s]: %s", time.Now().UTC().Format(logTimeFormat), severity, l.component, l.hostname, msg)
 }
 
-func (l *Logger) log(pfx string, exit bool, msg string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
+	if l.minLogLevel > logLevel {
+		return // log level is set higher, so ignoring this message
+	}
 
-	l.logger.SetPrefix(fmt.Sprintf("%s%s - [%-4s] ", pfx, l.hostname, l.component))
+	msg = l.constructLogLine(logLevel, msg, v...)
 	if exit {
 		l.logger.Fatal(msg) // Fatal prints and then calls os.Exit(1)
 	}
@@ -82,71 +78,61 @@ func (l *Logger) log(pfx string, exit bool, msg string) {
 }
 
 func (l *Logger) Debug(msg string) {
-	if l.logLevel > LogLevelDebug {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogPrefixDebug, false, msg)
+	l.log(LogLevelDebug, false, msg)
+}
+
+func (l *Logger) Debugln(msg string) {
+	l.Debug(fmt.Sprintln(msg))
 }
 
 func (l *Logger) Debugf(format string, v ...any) {
-	if l.logLevel > LogLevelDebug {
-		return // log level is set higher, so ignoring this message
-	}
-	l.logf(LogPrefixDebug, false, format, v...)
+	l.log(LogLevelDebug, false, format, v...)
 }
 
 func (l *Logger) Info(msg string) {
-	if l.logLevel > LogLevelInfo {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogPrefixInfo, false, msg)
+	l.log(LogLevelInfo, false, msg)
+}
+
+func (l *Logger) Infoln(msg string) {
+	l.Info(fmt.Sprintln(msg))
 }
 
 func (l *Logger) Infof(format string, v ...any) {
-	if l.logLevel > LogLevelInfo {
-		return // log level is set higher, so ignoring this message
-	}
-	l.logf(LogPrefixInfo, false, format, v...)
+	l.log(LogLevelInfo, false, format, v...)
 }
 
 func (l *Logger) Warn(msg string) {
-	if l.logLevel > LogLevelWarn {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogPrefixWarn, false, msg)
+	l.log(LogLevelWarn, false, msg)
+}
+
+func (l *Logger) Warnln(msg string) {
+	l.Warn(fmt.Sprintln(msg))
 }
 
 func (l *Logger) Warnf(format string, v ...any) {
-	if l.logLevel > LogLevelWarn {
-		return // log level is set higher, so ignoring this message
-	}
-	l.logf(LogPrefixWarn, false, format, v...)
+	l.log(LogLevelWarn, false, format, v...)
 }
 
 func (l *Logger) Error(msg string) {
-	if l.logLevel > LogLevelError {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogPrefixError, false, msg)
+	l.log(LogLevelError, false, msg)
+}
+
+func (l *Logger) Errorln(msg string) {
+	l.Error(fmt.Sprintln(msg))
 }
 
 func (l *Logger) Errorf(format string, v ...any) {
-	if l.logLevel > LogLevelError {
-		return // log level is set higher, so ignoring this message
-	}
-	l.logf(LogPrefixError, false, format, v...)
+	l.log(LogLevelError, false, format, v...)
 }
 
 func (l *Logger) Fatal(msg string) {
-	if l.logLevel > LogLevelFatal {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogPrefixFatal, true, msg)
+	l.log(LogLevelFatal, true, msg)
+}
+
+func (l *Logger) Fatalln(msg string) {
+	l.Fatal(fmt.Sprintln(msg))
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {
-	if l.logLevel > LogLevelFatal {
-		return // log level is set higher, so ignoring this message
-	}
-	l.logf(LogPrefixFatal, true, format, v...)
+	l.log(LogLevelFatal, true, format, v...)
 }

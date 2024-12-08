@@ -6,18 +6,23 @@ This repo provides a logging library for Go which has a few benefits:
 - unlike e.g. `glog`, it has minimal dependencies (most importantly, none with C bindings)
 - it's based on the default logger but provides `debug`, `warn` and `error` logging too
 - the log level can be set dynamically
+- the timestamp is RFC3339 compliant
 
 ## Log Format
 
 The log format is as follows:
 
-`YYYY/MM/DD hh:mm:ss <source file>:<line>: <LOG LEVEL>: <hostname> - [<COMPONENT>] message`
+`[YYYY-MM-DDThh:mm:ss][severity][component][hostname]: message`
 
 And example of the above would be:
 
-`2024/12/07 14:46:38 logging.go:70: WARN: srv01 - [MAIN] test message`
+`[2024-12-08T12:37:46Z][WARN ][MAIN][hostname]: test`
 
-**Note**: The component is always formatted as 4 characters so you want to choose an appropriate abbreviation.
+**Notes**:
+
+- The severity is always formatted as 5 characters.
+- The component is always formatted as 4 characters so you want to choose an appropriate abbreviation.
+- The hostname follows the component to allow for easier groking of the prefix without having a fixed hostname length.
 
 ## Usage
 

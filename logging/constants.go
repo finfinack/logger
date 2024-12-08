@@ -3,11 +3,13 @@ package logging
 import "time"
 
 const (
-	LogPrefixDebug = "DEBUG: "
-	LogPrefixInfo  = "INFO: "
-	LogPrefixWarn  = "WARN: "
-	LogPrefixError = "ERROR: "
-	LogPrefixFatal = "FATAL: "
+	// Log severities are used as prefixes and can max be 5 characters.
+	logPrefixDebug   = "DEBUG"
+	logPrefixInfo    = "INFO"
+	logPrefixWarn    = "WARN"
+	logPrefixError   = "ERROR"
+	logPrefixFatal   = "FATAL"
+	logPrefixUnknown = "N/A"
 )
 
 const (
@@ -18,7 +20,18 @@ const (
 	LogLevelFatal = 40
 )
 
-const contextCheckDelay = time.Second
+const (
+	contextCheckDelay = time.Second
+	logTimeFormat     = time.RFC3339
+)
+
+var logLevelToMessage = map[int]string{
+	LogLevelDebug: logPrefixDebug,
+	LogLevelInfo:  logPrefixInfo,
+	LogLevelWarn:  logPrefixWarn,
+	LogLevelError: logPrefixError,
+	LogLevelFatal: logPrefixFatal,
+}
 
 var logExitMessages = []string{
 	"Das System macht Feierabend. Bitte nicht stören. 🛑",
