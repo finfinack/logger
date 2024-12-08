@@ -9,15 +9,12 @@ import (
 	"math/big"
 	"os"
 	"strings"
-	"sync"
 	"time"
 )
 
 type Logger struct {
 	ctx    context.Context
 	logger *log.Logger
-
-	mu sync.Mutex
 
 	logLevel int
 
@@ -30,7 +27,7 @@ func NewLogger(ctx context.Context, writer io.Writer, logLevel int, component st
 	if out == nil {
 		out = os.Stdout
 	}
-	logger := log.New(out, "", log.Ldate|log.Ltime|log.Lshortfile|log.Lmsgprefix)
+	logger := log.New(out, "", 0) // omit default prefixes
 
 	l := &Logger{
 		ctx:       ctx,
@@ -59,22 +56,13 @@ func (l *Logger) waitForContext() {
 	}
 }
 
-func (l *Logger) logf(pfx string, exit bool, format string, v ...any) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.logger.SetPrefix(fmt.Sprintf("%s%s - [%-4s] ", pfx, l.hostname, l.component))
-	if exit {
-		l.logger.Fatalf(format, v...) // Fatal prints and then calls os.Exit(1)
-	}
-	l.logger.Printf(format, v...)
+func (l *Logger) constructLogLine(severity, msg string, v ...any) string {
+	msg = fmt.Sprintf(msg, v...)
+	return fmt.Sprintf("[%s][%-5s][%-4s][%s]: %s", time.Now().UTC().Format(logTimeFormat), severity, l.component, l.hostname, msg)
 }
 
-func (l *Logger) log(pfx string, exit bool, msg string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.logger.SetPrefix(fmt.Sprintf("%s%s - [%-4s] ", pfx, l.hostname, l.component))
+func (l *Logger) log(severity string, exit bool, msg string, v ...any) {
+	msg = l.constructLogLine(severity, msg, v...)
 	if exit {
 		l.logger.Fatal(msg) // Fatal prints and then calls os.Exit(1)
 	}
@@ -85,68 +73,68 @@ func (l *Logger) Debug(msg string) {
 	if l.logLevel > LogLevelDebug {
 		return // log level is set higher, so ignoring this message
 	}
-	l.log(LogPrefixDebug, false, msg)
+	l.log(LogSeverityDebug, false, msg)
 }
 
 func (l *Logger) Debugf(format string, v ...any) {
 	if l.logLevel > LogLevelDebug {
 		return // log level is set higher, so ignoring this message
 	}
-	l.logf(LogPrefixDebug, false, format, v...)
+	l.log(LogSeverityDebug, false, format, v...)
 }
 
 func (l *Logger) Info(msg string) {
 	if l.logLevel > LogLevelInfo {
 		return // log level is set higher, so ignoring this message
 	}
-	l.log(LogPrefixInfo, false, msg)
+	l.log(LogSeverityInfo, false, msg)
 }
 
 func (l *Logger) Infof(format string, v ...any) {
 	if l.logLevel > LogLevelInfo {
 		return // log level is set higher, so ignoring this message
 	}
-	l.logf(LogPrefixInfo, false, format, v...)
+	l.log(LogSeverityInfo, false, format, v...)
 }
 
 func (l *Logger) Warn(msg string) {
 	if l.logLevel > LogLevelWarn {
 		return // log level is set higher, so ignoring this message
 	}
-	l.log(LogPrefixWarn, false, msg)
+	l.log(LogSeverityWarn, false, msg)
 }
 
 func (l *Logger) Warnf(format string, v ...any) {
 	if l.logLevel > LogLevelWarn {
 		return // log level is set higher, so ignoring this message
 	}
-	l.logf(LogPrefixWarn, false, format, v...)
+	l.log(LogSeverityWarn, false, format, v...)
 }
 
 func (l *Logger) Error(msg string) {
 	if l.logLevel > LogLevelError {
 		return // log level is set higher, so ignoring this message
 	}
-	l.log(LogPrefixError, false, msg)
+	l.log(LogSeverityError, false, msg)
 }
 
 func (l *Logger) Errorf(format string, v ...any) {
 	if l.logLevel > LogLevelError {
 		return // log level is set higher, so ignoring this message
 	}
-	l.logf(LogPrefixError, false, format, v...)
+	l.log(LogSeverityError, false, format, v...)
 }
 
 func (l *Logger) Fatal(msg string) {
 	if l.logLevel > LogLevelFatal {
 		return // log level is set higher, so ignoring this message
 	}
-	l.log(LogPrefixFatal, true, msg)
+	l.log(LogSeverityFatal, true, msg)
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {
 	if l.logLevel > LogLevelFatal {
 		return // log level is set higher, so ignoring this message
 	}
-	l.logf(LogPrefixFatal, true, format, v...)
+	l.log(LogSeverityFatal, true, format, v...)
 }
