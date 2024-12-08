@@ -56,13 +56,21 @@ func (l *Logger) waitForContext() {
 	}
 }
 
-func (l *Logger) constructLogLine(severity, msg string, v ...any) string {
+func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 	msg = fmt.Sprintf(msg, v...)
+	severity, ok := logLevelToMessage[logLevel]
+	if !ok {
+		severity = logPrefixUnknown
+	}
 	return fmt.Sprintf("[%s][%-5s][%-4s][%s]: %s", time.Now().UTC().Format(logTimeFormat), severity, l.component, l.hostname, msg)
 }
 
-func (l *Logger) log(severity string, exit bool, msg string, v ...any) {
-	msg = l.constructLogLine(severity, msg, v...)
+func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
+	if l.minLogLevel > logLevel {
+		return // log level is set higher, so ignoring this message
+	}
+
+	msg = l.constructLogLine(logLevel, msg, v...)
 	if exit {
 		l.logger.Fatal(msg) // Fatal prints and then calls os.Exit(1)
 	}
@@ -70,10 +78,7 @@ func (l *Logger) log(severity string, exit bool, msg string, v ...any) {
 }
 
 func (l *Logger) Debug(msg string) {
-	if l.minLogLevel > LogLevelDebug {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityDebug, false, msg)
+	l.log(LogLevelDebug, false, msg)
 }
 
 func (l *Logger) Debugln(msg string) {
@@ -81,17 +86,11 @@ func (l *Logger) Debugln(msg string) {
 }
 
 func (l *Logger) Debugf(format string, v ...any) {
-	if l.minLogLevel > LogLevelDebug {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityDebug, false, format, v...)
+	l.log(LogLevelDebug, false, format, v...)
 }
 
 func (l *Logger) Info(msg string) {
-	if l.minLogLevel > LogLevelInfo {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityInfo, false, msg)
+	l.log(LogLevelInfo, false, msg)
 }
 
 func (l *Logger) Infoln(msg string) {
@@ -99,17 +98,11 @@ func (l *Logger) Infoln(msg string) {
 }
 
 func (l *Logger) Infof(format string, v ...any) {
-	if l.minLogLevel > LogLevelInfo {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityInfo, false, format, v...)
+	l.log(LogLevelInfo, false, format, v...)
 }
 
 func (l *Logger) Warn(msg string) {
-	if l.minLogLevel > LogLevelWarn {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityWarn, false, msg)
+	l.log(LogLevelWarn, false, msg)
 }
 
 func (l *Logger) Warnln(msg string) {
@@ -117,17 +110,11 @@ func (l *Logger) Warnln(msg string) {
 }
 
 func (l *Logger) Warnf(format string, v ...any) {
-	if l.minLogLevel > LogLevelWarn {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityWarn, false, format, v...)
+	l.log(LogLevelWarn, false, format, v...)
 }
 
 func (l *Logger) Error(msg string) {
-	if l.minLogLevel > LogLevelError {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityError, false, msg)
+	l.log(LogLevelError, false, msg)
 }
 
 func (l *Logger) Errorln(msg string) {
@@ -135,17 +122,11 @@ func (l *Logger) Errorln(msg string) {
 }
 
 func (l *Logger) Errorf(format string, v ...any) {
-	if l.minLogLevel > LogLevelError {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityError, false, format, v...)
+	l.log(LogLevelError, false, format, v...)
 }
 
 func (l *Logger) Fatal(msg string) {
-	if l.minLogLevel > LogLevelFatal {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityFatal, true, msg)
+	l.log(LogLevelFatal, true, msg)
 }
 
 func (l *Logger) Fatalln(msg string) {
@@ -153,8 +134,5 @@ func (l *Logger) Fatalln(msg string) {
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {
-	if l.minLogLevel > LogLevelFatal {
-		return // log level is set higher, so ignoring this message
-	}
-	l.log(LogSeverityFatal, true, format, v...)
+	l.log(LogLevelFatal, true, format, v...)
 }
