@@ -1,7 +1,6 @@
 package logging
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -12,48 +11,42 @@ import (
 	"time"
 )
 
+var (
+	minLogLevel = LogLevelInfo
+)
+
+func SetMinLogLevel(level int) {
+	minLogLevel = level
+}
+
 type Logger struct {
-	ctx    context.Context
-	logger *log.Logger
-
-	minLogLevel int
-
+	logger    *log.Logger
 	component string
 	hostname  string
 }
 
-func NewLogger(ctx context.Context, writer io.Writer, minLogLevel int, component string, hostname string) *Logger {
-	out := writer
-	if out == nil {
-		out = os.Stdout
+func NewLogger(component string) *Logger {
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
 	}
-	logger := log.New(out, "", 0) // omit default prefixes
-
-	l := &Logger{
-		ctx:         ctx,
-		logger:      logger,
-		minLogLevel: minLogLevel,
-		component:   strings.ToUpper(component),
-		hostname:    hostname,
+	return &Logger{
+		logger:    log.New(os.Stdout, "", 0), // omit default prefixes
+		component: strings.ToUpper(component),
+		hostname:  hostname,
 	}
-	go l.waitForContext()
-	return l
 }
 
-func (l *Logger) waitForContext() {
-	for {
-		select {
-		case <-time.After(contextCheckDelay):
-			continue // the context is still valid
-		case <-l.ctx.Done():
-			idx := big.NewInt(0)
-			if len(logExitMessages) > 1 {
-				idx, _ = rand.Int(rand.Reader, big.NewInt(int64(len(logExitMessages)-1)))
-			}
-			l.Info(logExitMessages[idx.Int64()])
-			return // the context has been cancelled
-		}
+func (l *Logger) SetWriter(writer io.Writer) {
+	l.logger = log.New(writer, "", 0) // omit default prefixes
+}
+
+func (l *Logger) Shutdown() {
+	idx := big.NewInt(0)
+	if len(logExitMessages) > 1 {
+		idx, _ = rand.Int(rand.Reader, big.NewInt(int64(len(logExitMessages)-1)))
 	}
+	l.Info(logExitMessages[idx.Int64()])
 }
 
 func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
@@ -62,11 +55,11 @@ func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 	if !ok {
 		severity = logPrefixUnknown
 	}
-	return fmt.Sprintf("[%s][%-5s][%-4s][%s]: %s", time.Now().UTC().Format(logTimeFormat), severity, l.component, l.hostname, msg)
+	return fmt.Sprintf("%s [%s][%-5s][%-4s]: %s", time.Now().UTC().Format(logTimeFormat), l.hostname, severity, l.component, msg)
 }
 
 func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
-	if l.minLogLevel > logLevel {
+	if minLogLevel > logLevel {
 		return // log level is set higher, so ignoring this message
 	}
 

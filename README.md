@@ -12,17 +12,16 @@ This repo provides a logging library for Go which has a few benefits:
 
 The log format is as follows:
 
-`[YYYY-MM-DDThh:mm:ss][severity][component][hostname]: message`
+`YYYY-MM-DDThh:mm:ss [hostname][severity][component]: message`
 
 And example of the above would be:
 
-`[2024-12-08T12:37:46Z][WARN ][MAIN][hostname]: test`
+`2024-12-08T12:37:46Z [hostname][WARN ][MAIN]: test`
 
 **Notes**:
 
 - The severity is always formatted as 5 characters.
 - The component is always formatted as 4 characters so you want to choose an appropriate abbreviation.
-- The hostname follows the component to allow for easier groking of the prefix without having a fixed hostname length.
 
 ## Usage
 
@@ -39,18 +38,19 @@ import (
 )
 
 func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	logger := logging.NewLogger(ctx, nil, logging.LogLevelInfo, "MAIN", "hostname")
+	// Global settings
+	logging.SetMinLogLevel(logging.LogLevelInfo) // Info is the default level, just a demo here
+
+	logger := logging.NewLogger("MAIN")
+	logger.SetWriter(os.Stdout) // stdout is the default, just a demo here
+	// Shutdown / cleanup before termination.
+	defer logger.Shutdown()
 
 	// Regular logging.
 	for i := 0; i < 3; i++ {
 		logger.Warnf("test(%d)", i)
 		logger.Debug("test") // this should not be logged due to the log level
 	}
-
-	// Cancel the context and wait for tasks to complete.
-	cancel()
-	time.Sleep(3 * time.Second)
 
 	// Finally demo the os.Exit(1) of fatal.
 	logger.Fatal("final error message")
