@@ -64,10 +64,11 @@ func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
 	}
 
 	msg = l.constructLogLine(logLevel, msg, v...)
-	if exit {
-		l.logger.Fatal(msg) // Fatal prints and then calls os.Exit(1)
-	}
 	l.logger.Print(msg)
+	if exit {
+		l.Shutdown()
+		os.Exit(1)
+	}
 }
 
 func (l *Logger) Debug(msg string) {
