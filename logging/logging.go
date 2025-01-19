@@ -51,8 +51,8 @@ func (l *Logger) Shutdown() {
 
 func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 	msg = fmt.Sprintf(msg, v...)
-	severity, ok := logLevelToMessage[logLevel]
-	if !ok {
+	severity, err := LevelToName(logLevel)
+	if err != nil {
 		severity = logPrefixUnknown
 	}
 	return fmt.Sprintf("%s [%s][%-5s][%-4s]: %s", time.Now().UTC().Format(logTimeFormat), l.hostname, severity, l.component, msg)

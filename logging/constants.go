@@ -1,6 +1,10 @@
 package logging
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 const (
 	// Log severities are used as prefixes and can max be 5 characters.
@@ -25,12 +29,30 @@ const (
 	logTimeFormat     = time.RFC3339
 )
 
-var logLevelToMessage = map[int]string{
+var logLevelToName = map[int]string{
 	LogLevelDebug: logPrefixDebug,
 	LogLevelInfo:  logPrefixInfo,
 	LogLevelWarn:  logPrefixWarn,
 	LogLevelError: logPrefixError,
 	LogLevelFatal: logPrefixFatal,
+}
+
+func LevelToName(lvl int) (string, error) {
+	n, ok := logLevelToName[lvl]
+	if !ok {
+		return "", fmt.Errorf("unable to find log level corresponding to %d", lvl)
+	}
+	return n, nil
+}
+
+func LevelToValue(name string) (int, error) {
+	name = strings.ToUpper(name)
+	for lvl, n := range logLevelToName {
+		if n == name {
+			return lvl, nil
+		}
+	}
+	return -1, fmt.Errorf("unable to find log level corresponding to %q", name)
 }
 
 var logExitMessages = []string{
