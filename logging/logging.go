@@ -58,7 +58,7 @@ func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 	return fmt.Sprintf("%s [%s][%-5s][%-4s]: %s", time.Now().UTC().Format(logTimeFormat), l.hostname, severity, l.component, msg)
 }
 
-func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
+func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
 	if minLogLevel > logLevel {
 		return // log level is set higher, so ignoring this message
 	}
@@ -72,7 +72,7 @@ func (l *Logger) log(logLevel int, exit bool, msg string, v ...any) {
 }
 
 func (l *Logger) Debug(msg string) {
-	l.log(LogLevelDebug, false, msg)
+	l.Log(LogLevelDebug, false, msg)
 }
 
 func (l *Logger) Debugln(msg string) {
@@ -80,11 +80,11 @@ func (l *Logger) Debugln(msg string) {
 }
 
 func (l *Logger) Debugf(format string, v ...any) {
-	l.log(LogLevelDebug, false, format, v...)
+	l.Log(LogLevelDebug, false, format, v...)
 }
 
 func (l *Logger) Info(msg string) {
-	l.log(LogLevelInfo, false, msg)
+	l.Log(LogLevelInfo, false, msg)
 }
 
 func (l *Logger) Infoln(msg string) {
@@ -92,11 +92,11 @@ func (l *Logger) Infoln(msg string) {
 }
 
 func (l *Logger) Infof(format string, v ...any) {
-	l.log(LogLevelInfo, false, format, v...)
+	l.Log(LogLevelInfo, false, format, v...)
 }
 
 func (l *Logger) Warn(msg string) {
-	l.log(LogLevelWarn, false, msg)
+	l.Log(LogLevelWarn, false, msg)
 }
 
 func (l *Logger) Warnln(msg string) {
@@ -104,11 +104,11 @@ func (l *Logger) Warnln(msg string) {
 }
 
 func (l *Logger) Warnf(format string, v ...any) {
-	l.log(LogLevelWarn, false, format, v...)
+	l.Log(LogLevelWarn, false, format, v...)
 }
 
 func (l *Logger) Error(msg string) {
-	l.log(LogLevelError, false, msg)
+	l.Log(LogLevelError, false, msg)
 }
 
 func (l *Logger) Errorln(msg string) {
@@ -116,11 +116,11 @@ func (l *Logger) Errorln(msg string) {
 }
 
 func (l *Logger) Errorf(format string, v ...any) {
-	l.log(LogLevelError, false, format, v...)
+	l.Log(LogLevelError, false, format, v...)
 }
 
 func (l *Logger) Fatal(msg string) {
-	l.log(LogLevelFatal, true, msg)
+	l.Log(LogLevelFatal, true, msg)
 }
 
 func (l *Logger) Fatalln(msg string) {
@@ -128,5 +128,5 @@ func (l *Logger) Fatalln(msg string) {
 }
 
 func (l *Logger) Fatalf(format string, v ...any) {
-	l.log(LogLevelFatal, true, format, v...)
+	l.Log(LogLevelFatal, true, format, v...)
 }
