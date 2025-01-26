@@ -71,74 +71,27 @@ func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
 	}
 }
 
-func (l *Logger) Debug(msg string) {
-	l.Log(LogLevelDebug, false, msg)
-}
+func (l *Logger) Debug(a ...any)                 { l.Log(LogLevelDebug, false, "", a...) }
+func (l *Logger) Debugln(a ...any)               { l.Debug(a...) }
+func (l *Logger) Debugf(format string, v ...any) { l.Log(LogLevelDebug, false, format, v...) }
 
-func (l *Logger) Debugln(msg string) {
-	l.Debug(fmt.Sprintln(msg))
-}
+func (l *Logger) Info(a ...any)                 { l.Log(LogLevelInfo, false, "", a...) }
+func (l *Logger) Infoln(a ...any)               { l.Info(a...) }
+func (l *Logger) Infof(format string, v ...any) { l.Log(LogLevelInfo, false, format, v...) }
 
-func (l *Logger) Debugf(format string, v ...any) {
-	l.Log(LogLevelDebug, false, format, v...)
-}
+func (l *Logger) Warn(a ...any)                 { l.Log(LogLevelWarn, false, "", a...) }
+func (l *Logger) Warnln(a ...any)               { l.Warn(a...) }
+func (l *Logger) Warnf(format string, v ...any) { l.Log(LogLevelWarn, false, format, v...) }
 
-func (l *Logger) Print(msg string) {
-	l.Log(LogLevelInfo, false, msg)
-}
+func (l *Logger) Error(a ...any)                 { l.Log(LogLevelError, false, "", a...) }
+func (l *Logger) Errorln(a ...any)               { l.Error(a...) }
+func (l *Logger) Errorf(format string, v ...any) { l.Log(LogLevelError, false, format, v...) }
 
-func (l *Logger) Println(msg string) {
-	l.Info(fmt.Sprintln(msg))
-}
+func (l *Logger) Fatal(a ...any)                 { l.Log(LogLevelFatal, true, "", a...) }
+func (l *Logger) Fatalln(a ...any)               { l.Fatal(a...) }
+func (l *Logger) Fatalf(format string, v ...any) { l.Log(LogLevelFatal, true, format, v...) }
 
-func (l *Logger) Printf(format string, v ...any) {
-	l.Log(LogLevelInfo, false, format, v...)
-}
-
-func (l *Logger) Info(msg string) {
-	l.Log(LogLevelInfo, false, msg)
-}
-
-func (l *Logger) Infoln(msg string) {
-	l.Info(fmt.Sprintln(msg))
-}
-
-func (l *Logger) Infof(format string, v ...any) {
-	l.Log(LogLevelInfo, false, format, v...)
-}
-
-func (l *Logger) Warn(msg string) {
-	l.Log(LogLevelWarn, false, msg)
-}
-
-func (l *Logger) Warnln(msg string) {
-	l.Warn(fmt.Sprintln(msg))
-}
-
-func (l *Logger) Warnf(format string, v ...any) {
-	l.Log(LogLevelWarn, false, format, v...)
-}
-
-func (l *Logger) Error(msg string) {
-	l.Log(LogLevelError, false, msg)
-}
-
-func (l *Logger) Errorln(msg string) {
-	l.Error(fmt.Sprintln(msg))
-}
-
-func (l *Logger) Errorf(format string, v ...any) {
-	l.Log(LogLevelError, false, format, v...)
-}
-
-func (l *Logger) Fatal(msg string) {
-	l.Log(LogLevelFatal, true, msg)
-}
-
-func (l *Logger) Fatalln(msg string) {
-	l.Fatal(fmt.Sprintln(msg))
-}
-
-func (l *Logger) Fatalf(format string, v ...any) {
-	l.Log(LogLevelFatal, true, format, v...)
-}
+// Print* functions are just a redirect to their Info* counterparts.
+func (l *Logger) Print(a ...any)                 { l.Info(a...) }
+func (l *Logger) Println(a ...any)               { l.Infoln(a...) }
+func (l *Logger) Printf(format string, v ...any) { l.Infof(format, v...) }
