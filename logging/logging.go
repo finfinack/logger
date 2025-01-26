@@ -83,6 +83,18 @@ func (l *Logger) Debugf(format string, v ...any) {
 	l.Log(LogLevelDebug, false, format, v...)
 }
 
+func (l *Logger) Print(msg string) {
+	l.Log(LogLevelInfo, false, msg)
+}
+
+func (l *Logger) Println(msg string) {
+	l.Info(fmt.Sprintln(msg))
+}
+
+func (l *Logger) Printf(format string, v ...any) {
+	l.Log(LogLevelInfo, false, format, v...)
+}
+
 func (l *Logger) Info(msg string) {
 	l.Log(LogLevelInfo, false, msg)
 }
