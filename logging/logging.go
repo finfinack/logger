@@ -50,7 +50,9 @@ func (l *Logger) Shutdown() {
 }
 
 func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
-	msg = fmt.Sprintf(msg, v...)
+	if len(v) > 0 {
+		msg = fmt.Sprintf(msg, v...)
+	}
 	severity, err := LevelToName(logLevel)
 	if err != nil {
 		severity = logPrefixUnknown
@@ -75,23 +77,23 @@ func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
 	}
 }
 
-func (l *Logger) Debug(msg string)               { l.Log(LogLevelDebug, false, msg, nil) }
+func (l *Logger) Debug(msg string)               { l.Log(LogLevelDebug, false, msg) }
 func (l *Logger) Debugln(msg string)             { l.Debug(msg) }
 func (l *Logger) Debugf(format string, v ...any) { l.Log(LogLevelDebug, false, format, v...) }
 
-func (l *Logger) Info(msg string)               { l.Log(LogLevelInfo, false, msg, nil) }
+func (l *Logger) Info(msg string)               { l.Log(LogLevelInfo, false, msg) }
 func (l *Logger) Infoln(msg string)             { l.Info(msg) }
 func (l *Logger) Infof(format string, v ...any) { l.Log(LogLevelInfo, false, format, v...) }
 
-func (l *Logger) Warn(msg string)               { l.Log(LogLevelWarn, false, msg, nil) }
+func (l *Logger) Warn(msg string)               { l.Log(LogLevelWarn, false, msg) }
 func (l *Logger) Warnln(msg string)             { l.Warn(msg) }
 func (l *Logger) Warnf(format string, v ...any) { l.Log(LogLevelWarn, false, format, v...) }
 
-func (l *Logger) Error(msg string)               { l.Log(LogLevelError, false, msg, nil) }
+func (l *Logger) Error(msg string)               { l.Log(LogLevelError, false, msg) }
 func (l *Logger) Errorln(msg string)             { l.Error(msg) }
 func (l *Logger) Errorf(format string, v ...any) { l.Log(LogLevelError, false, format, v...) }
 
-func (l *Logger) Fatal(msg string)               { l.Log(LogLevelFatal, true, msg, nil) }
+func (l *Logger) Fatal(msg string)               { l.Log(LogLevelFatal, true, msg) }
 func (l *Logger) Fatalln(msg string)             { l.Fatal(msg) }
 func (l *Logger) Fatalf(format string, v ...any) { l.Log(LogLevelFatal, true, format, v...) }
 
