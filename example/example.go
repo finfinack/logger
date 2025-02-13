@@ -18,8 +18,9 @@ func main() {
 	// Regular logging.
 	for i := 0; i < 3; i++ {
 		logger.Warnf("test(%d)", i)
-		logger.Debug("test") // this should not be logged due to the log level
 	}
+	logger.Debug("test") // this should not be logged due to the log level
+	logger.Infoln("test")
 
 	// Finally demo the os.Exit(1) of fatal.
 	logger.Fatal("final error message")
