@@ -66,8 +66,12 @@ func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
 	msg = l.constructLogLine(logLevel, msg, v...)
 	l.logger.Print(msg)
 	if exit {
-		l.Shutdown()
-		os.Exit(1)
+		l.Terminate()
+		code := 0
+		if logLevel >= LogLevelError {
+			code = 1
+		}
+		os.Exit(code)
 	}
 }
 
