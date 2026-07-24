@@ -1,26 +1,33 @@
 package logging
 
 import (
-	"crypto/rand"
 	"fmt"
 	"io"
 	"log"
-	"math/big"
+	"math/rand"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
-var (
-	minLogLevel = LogLevelInfo
-)
+// minLogLevel is the global threshold below which messages are dropped. It is
+// stored atomically because the log level can be changed at runtime while other
+// goroutines are logging.
+var minLogLevel atomic.Int32
+
+func init() {
+	minLogLevel.Store(LogLevelInfo)
+}
 
 func SetMinLogLevel(level int) {
-	minLogLevel = level
+	minLogLevel.Store(int32(level))
 }
 
 type Logger struct {
-	logger    *log.Logger
+	// logger is accessed atomically so SetWriter can swap the destination while
+	// other goroutines are logging without racing.
+	logger    atomic.Pointer[log.Logger]
 	component string
 	hostname  string
 }
@@ -30,23 +37,23 @@ func NewLogger(component string) *Logger {
 	if err != nil {
 		hostname = "unknown"
 	}
-	return &Logger{
-		logger:    log.New(os.Stdout, "", 0), // omit default prefixes
+	l := &Logger{
 		component: strings.ToUpper(component),
 		hostname:  hostname,
 	}
+	l.logger.Store(log.New(os.Stdout, "", 0)) // omit default prefixes
+	return l
 }
 
 func (l *Logger) SetWriter(writer io.Writer) {
-	l.logger = log.New(writer, "", 0) // omit default prefixes
+	l.logger.Store(log.New(writer, "", 0)) // omit default prefixes
 }
 
 func (l *Logger) Shutdown() {
-	idx := big.NewInt(0)
-	if len(logExitMessages) > 1 {
-		idx, _ = rand.Int(rand.Reader, big.NewInt(int64(len(logExitMessages)-1)))
+	if len(logExitMessages) == 0 {
+		return
 	}
-	l.Info(logExitMessages[idx.Int64()])
+	l.Info(logExitMessages[rand.Intn(len(logExitMessages))])
 }
 
 func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
@@ -61,12 +68,12 @@ func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 }
 
 func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
-	if minLogLevel > logLevel {
+	if minLogLevel.Load() > int32(logLevel) {
 		return // log level is set higher, so ignoring this message
 	}
 
 	msg = l.constructLogLine(logLevel, msg, v...)
-	l.logger.Print(msg)
+	l.logger.Load().Print(msg)
 	if exit {
 		l.Shutdown()
 		code := 0

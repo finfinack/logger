@@ -25,8 +25,7 @@ const (
 )
 
 const (
-	contextCheckDelay = time.Second
-	logTimeFormat     = time.RFC3339
+	logTimeFormat = time.RFC3339
 )
 
 var logLevelToName = map[int]string{

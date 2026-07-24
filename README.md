@@ -20,8 +20,8 @@ And example of the above would be:
 
 **Notes**:
 
-- The severity is always formatted as 5 characters.
-- The component is always formatted as 4 characters so you want to choose an appropriate abbreviation.
+- The severity is padded to a minimum of 5 characters.
+- The component is padded to a minimum of 4 characters (longer names are not truncated), so choose an appropriate abbreviation to keep the columns aligned.
 
 ## Usage
 
