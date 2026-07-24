@@ -1,3 +1,3 @@
 module github.com/finfinack/logger
 
-go 1.23.4
+go 1.26.5
