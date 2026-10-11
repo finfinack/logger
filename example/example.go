@@ -1,27 +1,37 @@
 package main
 
 import (
+	"context"
+	"flag"
+	"fmt"
 	"os"
 
-	"github.com/finfinack/logger/logging"
+	"github.com/finfinack/logger/v2/logging"
+)
+
+var (
+	jsonOutput = flag.Bool("json", false, "emit structured JSON records")
 )
 
 func main() {
-	// Global settings
-	logging.SetMinLogLevel(logging.LogLevelInfo) // Info is the default level, just a demo here
+	flag.Parse()
+	ctx := context.Background()
 
-	logger := logging.NewLogger("MAIN")
-	logger.SetWriter(os.Stdout) // stdout is the default, just a demo here
-	// Log a farewell on normal return.
-	defer logger.Shutdown()
-
-	// Regular logging.
-	for i := 0; i < 3; i++ {
-		logger.Warnf("test(%d)", i)
+	format := logging.FormatText
+	if *jsonOutput {
+		format = logging.FormatJSON
 	}
-	logger.Debug("test") // this should not be logged due to the log level
-	logger.Infoln("test")
 
-	// Finally demo the os.Exit(1) of fatal.
-	logger.Fatal("final error message")
+	logger, err := logging.NewLogger("MAIN", logging.Config{Format: format})
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer logger.Shutdown(ctx)
+
+	logging.SetMinLogLevel(logging.LogLevelInfo)
+	logger.Info(ctx, "service started", "port", 8080)
+	logger.Warn(ctx, "retrying request", "attempt", 2)
+	logger.Infof(ctx, "processed %d items", 5)
+	logger.Debug(ctx, "filtered debug message")
 }
