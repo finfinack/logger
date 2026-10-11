@@ -1,116 +1,213 @@
+// Package logging provides context-aware text and JSON logging through slog handlers.
 package logging
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"math/rand"
 	"os"
+	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// minLogLevel is the global threshold below which messages are dropped. It is
-// stored atomically because the log level can be changed at runtime while other
-// goroutines are logging.
-var minLogLevel atomic.Int32
+var minLogLevel atomic.Int64
 
-// Write failures get a best-effort diagnostic independent of the configured
-// destination. The existing logging API cannot return errors to callers.
+// Diagnostics use a separate destination and omit the failed log message.
+// Reporting is best-effort because the logging methods cannot return errors.
 var writeErrorLogger = log.New(os.Stderr, "logger: ", 0)
 
-func init() {
-	minLogLevel.Store(LogLevelInfo)
+func init() { minLogLevel.Store(LogLevelInfo) }
+
+// SetMinLogLevel changes the global threshold, including for existing loggers.
+func SetMinLogLevel(level int) { minLogLevel.Store(int64(level)) }
+
+// Format selects the output representation for a built-in handler.
+type Format int
+
+const (
+	// FormatText preserves the timestamp and hostname/severity/component prefix.
+	FormatText Format = iota
+	// FormatJSON emits one JSON object per line.
+	FormatJSON
+)
+
+// Config configures a logger. Its zero value selects text output on stdout.
+type Config struct {
+	// Format defaults to FormatText.
+	Format Format
+	// Writer defaults to os.Stdout and remains owned by the caller.
+	Writer io.Writer
+	// Handler replaces the built-in output. When set, Writer must be nil and
+	// Format must be FormatText (the zero value). Its lifecycle belongs to the caller.
+	Handler slog.Handler
 }
 
-func SetMinLogLevel(level int) {
-	minLogLevel.Store(int32(level))
-}
-
+// Logger sends records to a concurrency-safe slog handler.
+// Construct loggers with NewLogger; the zero value is not usable.
 type Logger struct {
-	// Keep one logger so writes and destination changes share its output lock.
-	logger    *log.Logger
-	component string
-	hostname  string
+	handler slog.Handler
+	writer  *syncWriter
 }
 
-func NewLogger(component string) *Logger {
+// NewLogger creates a logger and adds hostname and uppercased component metadata.
+// Invalid or conflicting output configuration is rejected.
+func NewLogger(component string, config Config) (*Logger, error) {
+	if config.Handler != nil && (config.Writer != nil || config.Format != FormatText) {
+		return nil, fmt.Errorf("a custom handler cannot be combined with Writer or Format")
+	}
+	if config.Format != FormatText && config.Format != FormatJSON {
+		return nil, fmt.Errorf("unsupported log format %d", config.Format)
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = "unknown"
 	}
-	l := &Logger{
-		logger:    log.New(os.Stdout, "", 0), // omit default prefixes
-		component: strings.ToUpper(component),
-		hostname:  hostname,
+	component = strings.ToUpper(component)
+	if config.Handler != nil {
+		return &Logger{handler: config.Handler.WithAttrs([]slog.Attr{
+			slog.String("hostname", hostname), slog.String("component", component),
+		})}, nil
 	}
-	return l
+	writer := config.Writer
+	if writer == nil {
+		writer = os.Stdout
+	}
+	output := &syncWriter{writer: writer}
+	var handler slog.Handler
+	if config.Format == FormatJSON {
+		handler = slog.NewJSONHandler(output, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+			ReplaceAttr: func(groups []string, attr slog.Attr) slog.Attr {
+				if len(groups) == 0 && attr.Key == slog.LevelKey && attr.Value.Any() == slogLevelFatal {
+					return slog.String(slog.LevelKey, logPrefixFatal)
+				}
+				return attr
+			},
+		}).WithAttrs([]slog.Attr{
+			slog.String("hostname", hostname), slog.String("component", component),
+		})
+	} else {
+		handler = &textHandler{writer: output, hostname: hostname, component: component}
+	}
+	return &Logger{handler: handler, writer: output}, nil
 }
 
-func (l *Logger) SetWriter(writer io.Writer) {
-	l.logger.SetOutput(writer)
+// SetWriter changes a built-in handler's destination, waiting for in-flight writes.
+// Nil writers and custom handlers are rejected; custom handlers own their output.
+func (l *Logger) SetWriter(writer io.Writer) error {
+	if writer == nil {
+		return fmt.Errorf("log writer must not be nil")
+	}
+	if l.writer == nil {
+		return fmt.Errorf("cannot change the writer of a custom handler")
+	}
+	l.writer.mu.Lock()
+	defer l.writer.mu.Unlock()
+	l.writer.writer = writer
+	return nil
 }
 
-// Shutdown logs a farewell message. It does not flush or close the writer;
-// callers retain ownership of the destination and its cleanup.
-func (l *Logger) Shutdown() {
-	if len(logExitMessages) == 0 {
+// Shutdown logs a farewell. It does not flush or close writers or handlers.
+func (l *Logger) Shutdown(ctx context.Context) {
+	if len(logExitMessages) > 0 {
+		l.Info(ctx, logExitMessages[rand.Intn(len(logExitMessages))])
+	}
+}
+
+// Log emits a record at a supported LogLevel with slog-style attributes.
+// The keys time, level, msg, hostname, and component are reserved at the top level.
+// Invalid levels and reserved attributes produce a stderr diagnostic.
+// A nil context is treated as context.Background(); cancellation does not drop logs.
+func (l *Logger) Log(ctx context.Context, level int, msg string, args ...any) {
+	l.log(ctx, level, msg, args, false)
+}
+
+func (l *Logger) log(ctx context.Context, level int, msg string, args []any, formatted bool) {
+	severity, ok := toSlogLevel(level)
+	if !ok {
+		writeErrorLogger.Printf("unsupported log level %d", level)
 		return
 	}
-	l.Info(logExitMessages[rand.Intn(len(logExitMessages))])
+	if minLogLevel.Load() > int64(level) {
+		return
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !l.handler.Enabled(ctx, severity) {
+		return
+	}
+	var pcs [1]uintptr
+	runtime.Callers(3, pcs[:])
+	if formatted {
+		msg = fmt.Sprintf(msg, args...)
+		args = nil
+	}
+	record := slog.NewRecord(time.Now().UTC(), severity, msg, pcs[0])
+	var attributes slog.Record
+	attributes.Add(args...)
+	attributes.Attrs(func(attr slog.Attr) bool {
+		addAttribute(&record, attr)
+		return true
+	})
+	if err := l.handler.Handle(ctx, record); err != nil {
+		writeErrorLogger.Printf("write failed: %q", err.Error())
+	}
 }
 
-func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
-	if len(v) > 0 {
-		msg = fmt.Sprintf(msg, v...)
-	}
-	severity, err := LevelToName(logLevel)
-	if err != nil {
-		severity = logPrefixUnknown
-	}
-	return fmt.Sprintf("%s [%s][%-5s][%-4s]: %s", time.Now().UTC().Format(logTimeFormat), l.hostname, severity, l.component, msg)
-}
-
-func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
-	if minLogLevel.Load() <= int32(logLevel) {
-		msg = l.constructLogLine(logLevel, msg, v...)
-		if err := l.logger.Output(2, msg); err != nil {
-			writeErrorLogger.Printf("write failed: %s", err)
+func addAttribute(record *slog.Record, attr slog.Attr) {
+	attr.Value = attr.Value.Resolve()
+	// slog inlines unnamed groups, so validate their keys at the same scope.
+	if attr.Key == "" && attr.Value.Kind() == slog.KindGroup {
+		for _, nested := range attr.Value.Group() {
+			addAttribute(record, nested)
 		}
+		return
 	}
-
-	if exit {
-		l.Shutdown()
-		code := 0
-		if logLevel >= LogLevelError {
-			code = 1
-		}
-		os.Exit(code)
+	switch attr.Key {
+	case slog.TimeKey, slog.LevelKey, slog.MessageKey, "hostname", "component":
+		writeErrorLogger.Printf("attribute key %q is reserved", attr.Key)
+	default:
+		record.AddAttrs(attr)
 	}
 }
 
-func (l *Logger) Debug(msg string)               { l.Log(LogLevelDebug, false, msg) }
-func (l *Logger) Debugln(msg string)             { l.Debug(msg) }
-func (l *Logger) Debugf(format string, v ...any) { l.Log(LogLevelDebug, false, format, v...) }
+const slogLevelFatal slog.Level = 12
 
-func (l *Logger) Info(msg string)               { l.Log(LogLevelInfo, false, msg) }
-func (l *Logger) Infoln(msg string)             { l.Info(msg) }
-func (l *Logger) Infof(format string, v ...any) { l.Log(LogLevelInfo, false, format, v...) }
+func toSlogLevel(level int) (slog.Level, bool) {
+	switch level {
+	case LogLevelDebug:
+		return slog.LevelDebug, true
+	case LogLevelInfo:
+		return slog.LevelInfo, true
+	case LogLevelWarn:
+		return slog.LevelWarn, true
+	case LogLevelError:
+		return slog.LevelError, true
+	case LogLevelFatal:
+		return slogLevelFatal, true
+	default:
+		return 0, false
+	}
+}
 
-func (l *Logger) Warn(msg string)               { l.Log(LogLevelWarn, false, msg) }
-func (l *Logger) Warnln(msg string)             { l.Warn(msg) }
-func (l *Logger) Warnf(format string, v ...any) { l.Log(LogLevelWarn, false, format, v...) }
+type syncWriter struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
 
-func (l *Logger) Error(msg string)               { l.Log(LogLevelError, false, msg) }
-func (l *Logger) Errorln(msg string)             { l.Error(msg) }
-func (l *Logger) Errorf(format string, v ...any) { l.Log(LogLevelError, false, format, v...) }
-
-func (l *Logger) Fatal(msg string)               { l.Log(LogLevelFatal, true, msg) }
-func (l *Logger) Fatalln(msg string)             { l.Fatal(msg) }
-func (l *Logger) Fatalf(format string, v ...any) { l.Log(LogLevelFatal, true, format, v...) }
-
-// Print* functions are just a redirect to their Info* counterparts.
-func (l *Logger) Print(msg string)               { l.Info(msg) }
-func (l *Logger) Println(msg string)             { l.Infoln(msg) }
-func (l *Logger) Printf(format string, v ...any) { l.Infof(format, v...) }
+func (w *syncWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.writer.Write(p)
+	if n < len(p) && err == nil {
+		err = io.ErrShortWrite
+	}
+	return n, err
+}
