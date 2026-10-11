@@ -1,76 +1,154 @@
-# Go logging library with a twist
+# Go logging library with a twist — v2
 
-This repo provides a logging library for Go which has a few benefits:
+Context-aware logging with structured attributes, the original hostname/component
+text prefix, and opt-in JSON output. The implementation uses standard-library
+`slog.Handler` interfaces and has no external dependencies.
 
-- it adds additional default formatting better suited to identify where a log line came from
-- unlike e.g. `glog`, it has minimal dependencies (most importantly, none with C bindings)
-- it's based on the default logger but provides `debug`, `warn` and `error` logging too
-- the log level can be set dynamically
-- the timestamp is RFC3339 compliant
-
-## Log Format
-
-The log format is as follows:
-
-`YYYY-MM-DDThh:mm:ss [hostname][severity][component]: message`
-
-And example of the above would be:
-
-`2024-12-08T12:37:46Z [hostname][WARN ][MAIN]: test`
-
-**Notes**:
-
-- The severity is padded to a minimum of 5 characters.
-- The component is padded to a minimum of 4 characters (longer names are not truncated), so choose an appropriate abbreviation to keep the columns aligned.
+The v1 implementation is maintained on the `v1` branch. v2 uses the module path
+`github.com/finfinack/logger/v2`.
 
 ## Usage
-
-The library can be used by including `github.com/finfinack/logger/logging`:
 
 ```go
 package main
 
 import (
-	"os"
+    "context"
+    "log"
 
-	"github.com/finfinack/logger/logging"
+    "github.com/finfinack/logger/v2/logging"
 )
 
 func main() {
-	// Global settings
-	logging.SetMinLogLevel(logging.LogLevelInfo) // Info is the default level, just a demo here
+    logger, err := logging.NewLogger("MAIN", logging.Config{
+        Format: logging.FormatJSON, // omit for the original text format
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    ctx := context.Background()
+    defer logger.Shutdown(ctx)
 
-	logger := logging.NewLogger("MAIN")
-	logger.SetWriter(os.Stdout) // stdout is the default, just a demo here
-	// Log a farewell on normal return.
-	defer logger.Shutdown()
-
-	// Regular logging.
-	for i := 0; i < 3; i++ {
-		logger.Warnf("test(%d)", i)
-		logger.Debug("test") // this should not be logged due to the log level
-	}
-
-	// Finally demo the os.Exit(1) of fatal.
-	logger.Fatal("final error message")
+    logger.Info(ctx, "request completed", "status", 200, "duration_ms", 42)
+    logger.Infof(ctx, "processed %d items", 5)
+    logger.Debug(ctx, "diagnostics") // filtered at the default info threshold
 }
 ```
 
-`Shutdown` only logs a farewell message; it does not flush or close the output.
-The caller owns the writer and must flush buffered output and close files as
-needed. `Fatal` exits the process without running deferred functions.
+Every logging method takes `context.Context` first, including `*f`, `*ln`,
+`Print*`, `Fatal*`, `Log`, and `Shutdown`. Pass the request context when available,
+or `context.Background()` for startup and other background work. Nil contexts
+are treated as background contexts. Cancellation does not suppress logging.
 
-Changing the writer on a logger is safe while other goroutines use that logger.
-If multiple loggers share a writer, that writer must support concurrent writes.
-Output failures are reported to stderr on a best-effort basis, independently of
-the minimum log level. The failed message is not included in the diagnostic.
+`Debug`, `Info`, `Warn`, `Error`, `Fatal`, and their `*ln` aliases accept alternating
+keys and values or `slog.Attr` values, including `slog.Group`. The `*f` methods
+use printf formatting; their arguments do not become structured fields.
 
-Text messages and component names are emitted verbatim, including newlines and
-terminal control characters. Escape untrusted input before logging it if it
-could be interpreted as another record or as terminal control sequences.
+## Output formats
 
-You can also run the provided example:
+`Config{}` defaults to `FormatText` and `os.Stdout`. Set `Writer` in the config
+to choose a different built-in destination.
 
-```bash
-go run example/example.go
+Text retains the original prefix and appends quoted key/value attributes:
+
+```text
+2026-10-11T12:00:00Z [hostname][INFO ][MAIN]: request completed status=200 duration_ms=42
+```
+
+Severity is padded to five characters, and the uppercased component is padded to
+four. Control characters throughout the rendered text record are escaped to keep
+each record on one physical line. Attribute encoding uses slog's text format.
+
+`FormatJSON` preserves typed values and emits one JSON object per line:
+
+```json
+{"time":"2026-10-11T12:00:00Z","level":"INFO","hostname":"hostname","component":"MAIN","msg":"request completed","status":200,"duration_ms":42}
+```
+
+Timestamps are UTC: RFC3339 in text and RFC3339 with fractional precision in JSON.
+The top-level attribute names `time`, `level`, `msg`, `hostname`, and `component`
+are reserved. Conflicting attributes are dropped with a stderr diagnostic;
+those names remain usable inside named groups. Unmatched attribute arguments
+follow slog's `!BADKEY` convention.
+
+## Levels and output errors
+
+The existing level constants keep their values: debug 0, info 10, warn 20,
+error 30, and fatal 40. Change the global threshold at runtime:
+
+```go
+logging.SetMinLogLevel(logging.LogLevelDebug)
+logger.Log(ctx, logging.LogLevelWarn, "retrying", "attempt", 2)
+```
+
+The threshold applies to existing loggers and custom handlers. A custom handler
+can impose additional filtering. `Log` accepts the supported level constants;
+unsupported levels produce a stderr diagnostic without emitting a record.
+
+Writer and handler errors, including short writes, are reported to stderr on a
+best-effort basis. Diagnostics quote errors and omit the failed log message.
+Error reporting cannot guarantee delivery if stderr also fails.
+
+`SetWriter` returns an error for nil writers or custom handlers:
+
+```go
+if err := logger.SetWriter(os.Stdout); err != nil {
+    // Handle the configuration error.
+}
+```
+
+Built-in writes and destination changes on one logger share a lock. If separate
+loggers share a writer, that writer must support concurrent writes.
+
+## Custom handlers and OpenTelemetry
+
+An application can supply any concurrency-safe `slog.Handler`:
+
+```go
+logger, err := logging.NewLogger("API", logging.Config{
+    Handler: applicationHandler,
+})
+```
+
+A custom handler receives the context, standard slog levels, hostname/component
+attributes, and the source location of the logging call. Fatal records use a
+custom slog level of 12. When `Handler` is set, leave `Writer` unset and `Format`
+at its zero value; custom handlers own their output and lifecycle.
+
+For OpenTelemetry, configure a LoggerProvider in the application and supply an
+[`otelslog.NewHandler`](https://pkg.go.dev/go.opentelemetry.io/contrib/bridges/otelslog#NewHandler)
+handler. The application owns the SDK/exporter dependencies, flushing, and
+shutdown. This library does not add an OpenTelemetry dependency or automatically
+copy context values into attributes.
+
+`Shutdown(ctx)` only logs a random farewell; it does not flush or close anything.
+`Fatal(ctx, ...)` logs at fatal level, logs a farewell subject to filtering, and
+exits with code 1 even if fatal output is filtered. Deferred functions do not run.
+For buffered or telemetry destinations, applications should log the error,
+perform their own bounded cleanup, then exit.
+
+## Migrating from v1
+
+1. Change imports from `github.com/finfinack/logger/logging` to
+   `github.com/finfinack/logger/v2/logging`.
+2. Pass a `Config` to `NewLogger` and handle its returned error.
+3. Add a context as the first argument of every logging call and `Shutdown`.
+4. Handle errors returned by `SetWriter`, or set `Config.Writer` at construction.
+5. Replace `Log(level, false, format, args...)` with `Log(ctx, level, msg, attrs...)`
+   for attributes, or a level-specific `*f` method for formatting. Replace
+   exit-enabled `Log` calls with application-managed termination or `Fatal`.
+6. Account for escaped control characters in text output and fractional JSON
+   timestamps when parsing logs.
+
+After v2 is published, install a tagged release with:
+
+```sh
+go get github.com/finfinack/logger/v2@v2.0.0
+```
+
+## Example
+
+```sh
+go run ./example
+go run ./example -json
 ```
