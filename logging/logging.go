@@ -16,6 +16,10 @@ import (
 // goroutines are logging.
 var minLogLevel atomic.Int32
 
+// Write failures get a best-effort diagnostic independent of the configured
+// destination. The existing logging API cannot return errors to callers.
+var writeErrorLogger = log.New(os.Stderr, "logger: ", 0)
+
 func init() {
 	minLogLevel.Store(LogLevelInfo)
 }
@@ -25,9 +29,8 @@ func SetMinLogLevel(level int) {
 }
 
 type Logger struct {
-	// logger is accessed atomically so SetWriter can swap the destination while
-	// other goroutines are logging without racing.
-	logger    atomic.Pointer[log.Logger]
+	// Keep one logger so writes and destination changes share its output lock.
+	logger    *log.Logger
 	component string
 	hostname  string
 }
@@ -38,17 +41,19 @@ func NewLogger(component string) *Logger {
 		hostname = "unknown"
 	}
 	l := &Logger{
+		logger:    log.New(os.Stdout, "", 0), // omit default prefixes
 		component: strings.ToUpper(component),
 		hostname:  hostname,
 	}
-	l.logger.Store(log.New(os.Stdout, "", 0)) // omit default prefixes
 	return l
 }
 
 func (l *Logger) SetWriter(writer io.Writer) {
-	l.logger.Store(log.New(writer, "", 0)) // omit default prefixes
+	l.logger.SetOutput(writer)
 }
 
+// Shutdown logs a farewell message. It does not flush or close the writer;
+// callers retain ownership of the destination and its cleanup.
 func (l *Logger) Shutdown() {
 	if len(logExitMessages) == 0 {
 		return
@@ -68,12 +73,13 @@ func (l *Logger) constructLogLine(logLevel int, msg string, v ...any) string {
 }
 
 func (l *Logger) Log(logLevel int, exit bool, msg string, v ...any) {
-	if minLogLevel.Load() > int32(logLevel) {
-		return // log level is set higher, so ignoring this message
+	if minLogLevel.Load() <= int32(logLevel) {
+		msg = l.constructLogLine(logLevel, msg, v...)
+		if err := l.logger.Output(2, msg); err != nil {
+			writeErrorLogger.Printf("write failed: %s", err)
+		}
 	}
 
-	msg = l.constructLogLine(logLevel, msg, v...)
-	l.logger.Load().Print(msg)
 	if exit {
 		l.Shutdown()
 		code := 0

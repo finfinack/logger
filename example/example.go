@@ -12,7 +12,7 @@ func main() {
 
 	logger := logging.NewLogger("MAIN")
 	logger.SetWriter(os.Stdout) // stdout is the default, just a demo here
-	// Shutdown / cleanup before termination.
+	// Log a farewell on normal return.
 	defer logger.Shutdown()
 
 	// Regular logging.

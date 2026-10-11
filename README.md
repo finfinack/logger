@@ -31,8 +31,7 @@ The library can be used by including `github.com/finfinack/logger/logging`:
 package main
 
 import (
-	"context"
-	"time"
+	"os"
 
 	"github.com/finfinack/logger/logging"
 )
@@ -43,7 +42,7 @@ func main() {
 
 	logger := logging.NewLogger("MAIN")
 	logger.SetWriter(os.Stdout) // stdout is the default, just a demo here
-	// Shutdown / cleanup before termination.
+	// Log a farewell on normal return.
 	defer logger.Shutdown()
 
 	// Regular logging.
@@ -56,6 +55,19 @@ func main() {
 	logger.Fatal("final error message")
 }
 ```
+
+`Shutdown` only logs a farewell message; it does not flush or close the output.
+The caller owns the writer and must flush buffered output and close files as
+needed. `Fatal` exits the process without running deferred functions.
+
+Changing the writer on a logger is safe while other goroutines use that logger.
+If multiple loggers share a writer, that writer must support concurrent writes.
+Output failures are reported to stderr on a best-effort basis, independently of
+the minimum log level. The failed message is not included in the diagnostic.
+
+Text messages and component names are emitted verbatim, including newlines and
+terminal control characters. Escape untrusted input before logging it if it
+could be interpreted as another record or as terminal control sequences.
 
 You can also run the provided example:
 
