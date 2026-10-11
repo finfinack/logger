@@ -2,6 +2,7 @@ package logging
 
 import (
 	"bytes"
+	"context"
 	"regexp"
 	"strings"
 	"testing"
@@ -9,11 +10,13 @@ import (
 
 func TestLogFormat(t *testing.T) {
 	var buf bytes.Buffer
-	l := NewLogger("main") // lower-case on purpose: should be upper-cased
-	l.SetWriter(&buf)
-	SetMinLogLevel(LogLevelDebug)
+	l := newTestLogger(t, "main", Config{}) // lower-case on purpose: should be upper-cased
+	if err := l.SetWriter(&buf); err != nil {
+		t.Fatal(err)
+	}
+	setTestLevel(t, LogLevelDebug)
 
-	l.Warn("hello world")
+	l.Warn(context.Background(), "hello world")
 
 	// timestamp [hostname][WARN ][MAIN]: hello world
 	re := regexp.MustCompile(`^\S+ \[[^\]]*\]\[WARN \]\[MAIN\]: hello world\n$`)
@@ -24,16 +27,18 @@ func TestLogFormat(t *testing.T) {
 
 func TestLevelFiltering(t *testing.T) {
 	var buf bytes.Buffer
-	l := NewLogger("t")
-	l.SetWriter(&buf)
-	SetMinLogLevel(LogLevelWarn)
+	l := newTestLogger(t, "t", Config{})
+	if err := l.SetWriter(&buf); err != nil {
+		t.Fatal(err)
+	}
+	setTestLevel(t, LogLevelWarn)
 
-	l.Info("dropped") // below threshold
+	l.Info(context.Background(), "dropped") // below threshold
 	if buf.Len() != 0 {
 		t.Errorf("Info below threshold logged %q, want nothing", buf.String())
 	}
 
-	l.Error("kept") // at/above threshold
+	l.Error(context.Background(), "kept") // at/above threshold
 	if !strings.Contains(buf.String(), "kept") {
 		t.Errorf("Error output = %q, want it to contain %q", buf.String(), "kept")
 	}
@@ -47,15 +52,17 @@ func TestFormatArgSafety(t *testing.T) {
 		log  func(l *Logger)
 		want string
 	}{
-		{"literal percent", func(l *Logger) { l.Info("100% done") }, "100% done"},
-		{"formatted", func(l *Logger) { l.Infof("val=%d", 5) }, "val=5"},
+		{"literal percent", func(l *Logger) { l.Info(context.Background(), "100% done") }, "100% done"},
+		{"formatted", func(l *Logger) { l.Infof(context.Background(), "val=%d", 5) }, "val=5"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			l := NewLogger("t")
-			l.SetWriter(&buf)
-			SetMinLogLevel(LogLevelDebug)
+			l := newTestLogger(t, "t", Config{})
+			if err := l.SetWriter(&buf); err != nil {
+				t.Fatal(err)
+			}
+			setTestLevel(t, LogLevelDebug)
 
 			tc.log(l)
 
@@ -103,26 +110,24 @@ func TestLevelToValue(t *testing.T) {
 	}
 }
 
-// TestShutdownReachesAllMessages guards against the off-by-one that previously
-// made the last exit message unreachable.
-func TestShutdownReachesAllMessages(t *testing.T) {
+func TestShutdown(t *testing.T) {
+	setTestLevel(t, LogLevelInfo)
+	var buf bytes.Buffer
+	logger := newTestLogger(t, "test", Config{Writer: &buf})
+	logger.Shutdown(context.Background())
 	if len(logExitMessages) == 0 {
-		t.Skip("no exit messages configured")
+		if buf.Len() != 0 {
+			t.Errorf("unexpected farewell: %q", buf.String())
+		}
+		return
 	}
-	last := logExitMessages[len(logExitMessages)-1]
-	SetMinLogLevel(LogLevelDebug)
-
-	seen := false
-	for i := 0; i < 100000 && !seen; i++ {
-		var buf bytes.Buffer
-		l := NewLogger("t")
-		l.SetWriter(&buf)
-		l.Shutdown()
-		if strings.Contains(buf.String(), last) {
-			seen = true
+	if strings.Count(buf.String(), "\n") != 1 {
+		t.Fatalf("expected one farewell: %q", buf.String())
+	}
+	for _, message := range logExitMessages {
+		if strings.HasSuffix(buf.String(), message+"\n") {
+			return
 		}
 	}
-	if !seen {
-		t.Errorf("last exit message %q was never selected by Shutdown", last)
-	}
+	t.Errorf("unknown farewell: %q", buf.String())
 }
