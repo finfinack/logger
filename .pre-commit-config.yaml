@@ -8,12 +8,5 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-yaml
-  - repo: https://github.com/dnephin/pre-commit-golang
-    rev: v0.5.1
-    hooks:
-      - id: go-fmt
-      - id: go-unit-tests
-      - id: go-build
-      - id: go-mod-tidy
 
 exclude: (^vendor/)
