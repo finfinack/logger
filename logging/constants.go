@@ -17,10 +17,15 @@ const (
 )
 
 const (
+	// LogLevelDebug enables diagnostic messages.
 	LogLevelDebug = 0
-	LogLevelInfo  = 10
-	LogLevelWarn  = 20
+	// LogLevelInfo enables informational messages.
+	LogLevelInfo = 10
+	// LogLevelWarn enables warnings.
+	LogLevelWarn = 20
+	// LogLevelError enables error messages.
 	LogLevelError = 30
+	// LogLevelFatal identifies messages associated with process termination.
 	LogLevelFatal = 40
 )
 
@@ -36,6 +41,7 @@ var logLevelToName = map[int]string{
 	LogLevelFatal: logPrefixFatal,
 }
 
+// LevelToName returns the name of a supported log level.
 func LevelToName(lvl int) (string, error) {
 	n, ok := logLevelToName[lvl]
 	if !ok {
@@ -44,6 +50,7 @@ func LevelToName(lvl int) (string, error) {
 	return n, nil
 }
 
+// LevelToValue parses a log level name, case-insensitively.
 func LevelToValue(name string) (int, error) {
 	name = strings.ToUpper(name)
 	for lvl, n := range logLevelToName {
